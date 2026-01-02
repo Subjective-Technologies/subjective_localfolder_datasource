@@ -1,1 +1,7 @@
-# No third-party dependencies required
+easyocr
+numpy
+Pillow
+PyMuPDF
+requests
+torch
+torchvision
