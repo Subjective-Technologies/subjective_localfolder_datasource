@@ -32,6 +32,7 @@ TEXT_EXTS = {
 IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".tif", ".tiff", ".webp", ".bmp"}
 PDF_EXTS = {".pdf"}
 DOCX_EXTS = {".docx"}
+SPREADSHEET_EXTS = {".xlsx", ".xls", ".csv"}
 OCR_IMAGE_MAX_SIDE = int(os.environ.get("CONTEXT_OCR_MAX_SIDE", "1600"))
 OCR_PDF_SCALE = float(os.environ.get("CONTEXT_OCR_PDF_SCALE", "1.0"))
 IGNORE_DIRS = {
@@ -193,6 +194,25 @@ def _extract_docx_text(docx_path: str) -> Optional[str]:
         return None
 
 
+def _extract_spreadsheet_text(path: str) -> Optional[str]:
+    try:
+        import pandas as pd
+
+        ext = Path(path).suffix.lower()
+        if ext == ".csv":
+            df = pd.read_csv(path)
+        elif ext == ".xlsx":
+            df = pd.read_excel(path, engine="openpyxl")
+        elif ext == ".xls":
+            df = pd.read_excel(path, engine="xlrd")
+        else:
+            return None
+        text = df.to_csv(index=False)
+        return text.strip() if text else None
+    except Exception:
+        return None
+
+
 class _ProgressSink(Protocol):
     def set_total_items(self, total: int) -> None:
         ...
@@ -275,6 +295,13 @@ def _collect_context(
                         entry["content_note"] = "docx_text"
                     else:
                         entry["content_note"] = "unreadable_or_empty_docx_text"
+                elif ext in SPREADSHEET_EXTS:
+                    sheet_text = _extract_spreadsheet_text(fpath)
+                    if sheet_text:
+                        entry["content"] = sheet_text
+                        entry["content_note"] = "spreadsheet_text"
+                    else:
+                        entry["content_note"] = "unreadable_or_empty_spreadsheet_text"
                 else:
                     entry["content_note"] = "unreadable_or_binary"
             entries.append(entry)

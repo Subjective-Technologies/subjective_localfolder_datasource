@@ -1,8 +1,11 @@
 easyocr
+pandas
 python-docx
 numpy
+openpyxl
 Pillow
 PyMuPDF
 requests
 torch
 torchvision
+xlrd
