@@ -187,7 +187,7 @@ class _ProgressSink(Protocol):
     def set_total_processing_time(self, elapsed: float) -> None:
         ...
 
-    def update(self, payload: Dict[str, object]) -> None:
+    def set_processed_items(self, processed_items: int) -> None:
         ...
 
     def set_fetch_completed(self, completed: bool) -> None:
@@ -219,6 +219,7 @@ def _collect_context(
         progress.set_total_items(len(all_items))
 
     start = time.time()
+    processed = 0
     for kind, fpath, rel_path in all_items:
         if kind == "dir":
             entries.append({"path": rel_path if rel_path != "." else ".", "type": "dir"})
@@ -258,8 +259,9 @@ def _collect_context(
                     entry["content_note"] = "unreadable_or_binary"
             entries.append(entry)
         if progress is not None:
+            processed += 1
             progress.set_total_processing_time(time.time() - start)
-            progress.update({"path": rel_path, "type": kind})
+            progress.set_processed_items(processed)
 
     if progress is not None:
         progress.set_fetch_completed(True)
