@@ -31,6 +31,7 @@ TEXT_EXTS = {
 }
 IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".tif", ".tiff", ".webp", ".bmp"}
 PDF_EXTS = {".pdf"}
+DOCX_EXTS = {".docx"}
 OCR_IMAGE_MAX_SIDE = int(os.environ.get("CONTEXT_OCR_MAX_SIDE", "1600"))
 OCR_PDF_SCALE = float(os.environ.get("CONTEXT_OCR_PDF_SCALE", "1.0"))
 IGNORE_DIRS = {
@@ -180,6 +181,18 @@ def _extract_pdf_text(pdf_path: str) -> Optional[str]:
         return None
 
 
+def _extract_docx_text(docx_path: str) -> Optional[str]:
+    try:
+        import docx
+
+        doc = docx.Document(docx_path)
+        parts = [p.text for p in doc.paragraphs if p.text]
+        merged = "\n".join(parts).strip()
+        return merged if merged else None
+    except Exception:
+        return None
+
+
 class _ProgressSink(Protocol):
     def set_total_items(self, total: int) -> None:
         ...
@@ -255,6 +268,13 @@ def _collect_context(
                         entry["content_note"] = "pdf_text"
                     else:
                         entry["content_note"] = "unreadable_or_empty_pdf_text"
+                elif ext in DOCX_EXTS:
+                    docx_text = _extract_docx_text(fpath)
+                    if docx_text:
+                        entry["content"] = docx_text
+                        entry["content_note"] = "docx_text"
+                    else:
+                        entry["content_note"] = "unreadable_or_empty_docx_text"
                 else:
                     entry["content_note"] = "unreadable_or_binary"
             entries.append(entry)

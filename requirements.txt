@@ -1,4 +1,5 @@
 easyocr
+python-docx
 numpy
 Pillow
 PyMuPDF
