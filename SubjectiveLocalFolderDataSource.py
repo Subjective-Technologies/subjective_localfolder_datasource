@@ -5,13 +5,20 @@ class SubjectiveLocalFolderDataSource(SubjectiveDataSource):
 
     def __init__(self, params=None):
         super().__init__(params=params)
-        self.time_interval = params['time_interval']
+        params = params or {}
+        self.time_interval = params.get('time_interval', 5)
 
     def fetch(self):
         # This code will take screenshots and extract KnowledgeHooks
         BBLogger.log("Starting real-time KnowledgeHooks processing.")
         # [Your real-time fetching implementation here]
-        pass
+        payload = {
+            "type": "local_folder_start",
+            "path": self.params.get("path", ""),
+            "connection_name": self.params.get("connection_name", ""),
+            "server": self.params.get("server", ""),
+        }
+        return payload
 
     # ------------------ New Methods ------------------
     def get_icon(self):
@@ -32,6 +39,6 @@ class SubjectiveLocalFolderDataSource(SubjectiveDataSource):
         """
         return {
             "connection_type": "LocalFolder",
-            "fields": ["path"]
+            "fields": ["path", "time_interval"]
         }
 
