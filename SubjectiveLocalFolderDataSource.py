@@ -144,7 +144,7 @@ def _get_easyocr_reader(use_gpu: Optional[bool]):
 
     use_gpu = torch.cuda.is_available() if use_gpu is None else use_gpu
     if use_gpu not in _EASYOCR_READER:
-        _EASYOCR_READER[use_gpu] = easyocr.Reader(["en"], gpu=use_gpu)
+        _EASYOCR_READER[use_gpu] = easyocr.Reader(["en"], gpu=use_gpu, verbose=False)
     return _EASYOCR_READER[use_gpu]
 
 
@@ -155,14 +155,34 @@ def _ocr_image(image_path: str, use_gpu: Optional[bool]) -> Optional[str]:
 
         reader = _get_easyocr_reader(use_gpu)
         img = Image.open(image_path)
-        max_side = max(img.size)
+        width, height = img.size
+        max_side = max(width, height)
         if OCR_IMAGE_MAX_SIDE > 0 and max_side > OCR_IMAGE_MAX_SIDE:
-            scale = OCR_IMAGE_MAX_SIDE / max_side
-            new_size = (int(img.size[0] * scale), int(img.size[1] * scale))
-            img = img.resize(new_size, Image.LANCZOS)
-        results = reader.readtext(np.array(img), detail=0)
+            if height / max(1, width) >= 3:
+                if width > OCR_IMAGE_MAX_SIDE:
+                    scale = OCR_IMAGE_MAX_SIDE / width
+                    new_size = (int(width * scale), int(height * scale))
+                    img = img.resize(new_size, Image.LANCZOS)
+            else:
+                scale = OCR_IMAGE_MAX_SIDE / max_side
+                new_size = (int(width * scale), int(height * scale))
+                img = img.resize(new_size, Image.LANCZOS)
+
+        width, height = img.size
+        tile_height = OCR_IMAGE_MAX_SIDE if OCR_IMAGE_MAX_SIDE > 0 else 2000
+        if height / max(1, width) >= 3 and height > tile_height:
+            results: List[str] = []
+            for y0 in range(0, height, tile_height):
+                y1 = min(y0 + tile_height, height)
+                tile = img.crop((0, y0, width, y1))
+                tile_results = reader.readtext(np.array(tile), detail=0)
+                results.extend(r for r in tile_results if r)
+        else:
+            results = reader.readtext(np.array(img), detail=0)
+
         return "\n".join(r for r in results if r).strip()
-    except Exception:
+    except Exception as exc:
+        _safe_log(f"OCR failed for {image_path}: {exc}")
         return None
 
 
@@ -179,6 +199,30 @@ def _extract_pdf_text(pdf_path: str) -> Optional[str]:
         merged = "\n\n".join(t for t in texts if t).strip()
         return merged if merged else None
     except Exception:
+        return None
+
+
+def _ocr_pdf(pdf_path: str, use_gpu: Optional[bool]) -> Optional[str]:
+    try:
+        import fitz
+        import numpy as np
+        from PIL import Image
+
+        reader = _get_easyocr_reader(use_gpu)
+        texts: List[str] = []
+        with fitz.open(pdf_path) as doc:
+            for page in doc:
+                mat = fitz.Matrix(OCR_PDF_SCALE, OCR_PDF_SCALE)
+                pix = page.get_pixmap(matrix=mat, alpha=False)
+                img = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
+                results = reader.readtext(np.array(img), detail=0)
+                page_text = "\n".join(r for r in results if r).strip()
+                if page_text:
+                    texts.append(page_text)
+        merged = "\n\n".join(t for t in texts if t).strip()
+        return merged if merged else None
+    except Exception as exc:
+        _safe_log(f"OCR failed for {pdf_path}: {exc}")
         return None
 
 
@@ -287,7 +331,12 @@ def _collect_context(
                         entry["content"] = pdf_text
                         entry["content_note"] = "pdf_text"
                     else:
-                        entry["content_note"] = "unreadable_or_empty_pdf_text"
+                        ocr_text = _ocr_pdf(fpath, use_gpu)
+                        if ocr_text:
+                            entry["content"] = ocr_text
+                            entry["content_note"] = "ocr_pdf"
+                        else:
+                            entry["content_note"] = "unreadable_or_empty_pdf_text"
                 elif ext in DOCX_EXTS:
                     docx_text = _extract_docx_text(fpath)
                     if docx_text:
