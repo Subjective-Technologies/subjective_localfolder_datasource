@@ -1,4 +1,5 @@
 {
+  "description": "Scans local folders, extracts text from documents/PDFs/images, and emits normalized filesystem knowledge artifacts.",
   "domainCategory": "Cloud & DevOps",
   "subjectiveTechnologyElement": "DataSources",
   "publisher": "BrainBoost Ltd.",
@@ -9,7 +10,7 @@
     {
       "type": "splitList",
       "title": "Local Folder",
-      "text": "A Subjective data source for local folder.",
+      "text": "Scans local folders, extracts text from documents/PDFs/images, and emits normalized filesystem knowledge artifacts.",
       "image": {
         "src": "/subjective_localfolder_datasource/icon.svg",
         "alt": "Local Folder icon"
