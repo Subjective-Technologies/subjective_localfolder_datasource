@@ -1,0 +1,24 @@
+﻿[project]
+name = "subjective_localfolder_datasource"
+version = "0.1.0"
+description = "Subjective data source plugin: Localfolder."
+requires-python = ">=3.11,<3.12"
+dependencies = [
+  "easyocr",
+  "pandas",
+  "python-docx",
+  "numpy",
+  "openpyxl",
+  "pillow",
+  "PyMuPDF",
+  "requests",
+  "torch",
+  "torchvision",
+  "xlrd",
+  "brainboost-rclone-oauth-package @ git+https://github.com/Subjective-Technologies/brainboost_rclone_oauth_package.git",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
