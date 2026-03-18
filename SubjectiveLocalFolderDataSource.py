@@ -52,52 +52,106 @@ MAX_TEXT_BYTES = 200_000
 
 class SubjectiveLocalFolderDataSource(SubjectiveDataSource):
 
-    def __init__(self, params=None, name=None, **kwargs):
-        super().__init__(params=params, name=name, **kwargs)
-        params = params or {}
-        self.time_interval = params.get("time_interval")
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        conn = getattr(self, "_connection", {}) or {}
+        params = self.params if isinstance(self.params, dict) else {}
 
-    def fetch(self):
-        log_path = None
-        if isinstance(self.params, dict):
-            log_path = self.params.get("log_path")
-        _prime_bbconfig(log_path=log_path)
-        _safe_log("Starting local folder context extraction.")
+        self.path = (
+            conn.get("path")
+            or conn.get("url")
+            or params.get("path")
+            or params.get("url")
+        )
+        self.time_interval = conn.get("time_interval") or params.get("time_interval")
+        self.log_path = conn.get("log_path") or params.get("log_path")
 
-        start_path = None
-        if isinstance(self.params, dict):
-            start_path = self.params.get("path")
-        if not start_path:
-            raise ValueError("Missing required param: path")
+        gpu_value = conn["gpu"] if "gpu" in conn else params.get("gpu")
+        self.use_gpu = _coerce_optional_bool(gpu_value)
 
-        use_gpu = None
-        if isinstance(self.params, dict) and "gpu" in self.params:
-            use_gpu = bool(self.params.get("gpu"))
+    @classmethod
+    def connection_schema(cls):
+        return {
+            "path": {
+                "type": "folder_path",
+                "label": "Folder Path",
+                "description": "Local folder to scan and extract context from.",
+                "required": True,
+            },
+            "time_interval": {
+                "type": "number",
+                "label": "Time Interval",
+                "description": "Optional legacy interval value retained for backward compatibility.",
+                "required": False,
+            },
+            "gpu": {
+                "type": "bool",
+                "label": "Use GPU for OCR",
+                "description": "Enable GPU acceleration for OCR when available.",
+                "required": False,
+                "default": False,
+            },
+            "log_path": {
+                "type": "folder_path",
+                "label": "Log Path",
+                "description": "Directory used for BrainBoost logging output.",
+                "required": False,
+            },
+        }
 
-        context = _collect_context(start_path, progress=self, use_gpu=use_gpu)
-        return context
+    @classmethod
+    def request_schema(cls):
+        return {}
 
-    # ------------------ New Methods ------------------
-    def get_icon(self):
+    @classmethod
+    def output_schema(cls):
+        return {
+            "root_path": {
+                "type": "folder_path",
+                "label": "Root Path",
+            },
+            "generated_at": {
+                "type": "text",
+                "label": "Generated At",
+            },
+            "counts": {
+                "type": "textarea",
+                "label": "Counts",
+            },
+            "entries": {
+                "type": "textarea",
+                "label": "Entries",
+            },
+        }
+
+    @classmethod
+    def icon(cls) -> str:
         """Return SVG icon content, preferring a local icon.svg in the plugin folder."""
-        import os
-        icon_path = os.path.join(os.path.dirname(__file__), 'icon.svg')
+        icon_path = os.path.join(os.path.dirname(__file__), "icon.svg")
         try:
             if os.path.exists(icon_path):
-                with open(icon_path, 'r', encoding='utf-8') as f:
+                with open(icon_path, "r", encoding="utf-8") as f:
                     return f.read()
         except Exception:
             pass
         return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><rect width="24" height="24" rx="4" fill="#f59e0b"/><path fill="#fff" d="M6 7h12v2H6zm0 4h12v2H6zm0 4h8v2H6z"/></svg>'
 
-    def get_connection_data(self):
-        """
-        Return the connection type and required fields for KnowledgeHooks real-time data.
-        """
-        return {
-            "connection_type": "LocalFolder",
-            "fields": ["path", "time_interval"]
-        }
+    def run(self, request):
+        request = request or {}
+        log_path = request.get("log_path") or self.log_path
+        _prime_bbconfig(log_path=log_path)
+        _safe_log("Starting local folder context extraction.")
+
+        start_path = request.get("path") or self.path
+        if not start_path:
+            raise ValueError("Missing required connection field: path")
+
+        use_gpu = self.use_gpu
+        if "gpu" in request:
+            use_gpu = _coerce_optional_bool(request.get("gpu"))
+
+        context = _collect_context(start_path, progress=self, use_gpu=use_gpu)
+        return context
 
 
 def _safe_stat(path: str) -> Dict[str, object]:
@@ -200,6 +254,16 @@ def _extract_pdf_text(pdf_path: str) -> Optional[str]:
         return merged if merged else None
     except Exception:
         return None
+
+
+def _coerce_optional_bool(value):
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.lower() in {"true", "1", "yes", "on"}
+    return bool(value)
 
 
 def _ocr_pdf(pdf_path: str, use_gpu: Optional[bool]) -> Optional[str]:
